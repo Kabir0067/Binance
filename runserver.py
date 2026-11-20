@@ -53,7 +53,7 @@ VPS_PORT = int(os.getenv("VPS_PORT", "22").strip() or 22)
 REMOTE_DIR = os.getenv("REMOTE_PROJECT_DIR", "Binance").strip()        # нисбат ба $HOME ё роҳи мутлақ
 SERVICE_NAME = os.getenv("SYSTEMD_SERVICE_NAME", "binance-bot").strip() or "binance-bot"
 
-GIT_REPO_URL = os.getenv("GIT_REPO_URL", "").strip()   # масалан https://github.com/<user>/<repo>.git (холӣ → SFTP)
+GIT_REPO_URL = os.getenv("GIT_REPO_URL", "https://github.com/Kabir0067/Binance.git").strip()
 GIT_REMOTE = "origin"
 GIT_BRANCH = os.getenv("GIT_BRANCH", "main").strip() or "main"
 
@@ -399,9 +399,21 @@ def deploy_code(r: Remote, info: RemoteInfo, repo_url: str | None) -> None:
     ok(f"Код бо SFTP фиристода шуд ({len(files)} файл)")
 
 
+BOT_ENV_KEYS = ("BINANCE_API_KEY", "BINANCE_API_SECRET", "TELE_BOT_API", "ADMIN_ID")
+
+
 def upload_env(r: Remote, info: RemoteInfo) -> None:
-    r.upload(PROJECT_ROOT / ".env", f"{info.project_dir}/.env", mode=0o600)
-    ok(".env фиристода шуд (chmod 600)")
+    """Ба сервер танҳо калидҳои бот меравад (VPS_PASSWORD ва дигар калидҳои деплой — не)."""
+    lines = []
+    for raw in (PROJECT_ROOT / ".env").read_text(encoding="utf-8").splitlines():
+        key = raw.split("=", 1)[0].strip()
+        if "=" in raw and key in BOT_ENV_KEYS:
+            lines.append(f"{key}={raw.split('=', 1)[1].strip()}")
+    missing = [k for k in BOT_ENV_KEYS if not any(x.startswith(f"{k}=") for x in lines)]
+    if missing:
+        raise DeployError(f"Дар .env калидҳо нестанд: {', '.join(missing)}")
+    r.write_text(f"{info.project_dir}/.env", "\n".join(lines) + "\n", mode=0o600)
+    ok(".env фиристода шуд (танҳо 4 калиди бот, chmod 600)")
 
 
 def setup_venv(r: Remote, info: RemoteInfo) -> None:
